@@ -10,6 +10,7 @@ import (
 // Write is a representation of a committed write to backing storage.
 // A serialized version is stored in the "write" CF of our engine when a write is committed. That allows MvccTxn to find
 // the status of a key at a given timestamp.
+// commit ts is encoded to key, and StartTS is in Write struct
 type Write struct {
 	StartTS uint64
 	Kind    WriteKind
