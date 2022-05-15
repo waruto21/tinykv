@@ -492,16 +492,6 @@ func (r *Raft) appendEntries(entries ...*pb.Entry) {
 	es := make([]pb.Entry, 0, len(entries))
 	for _, e := range entries {
 		if e.EntryType == pb.EntryType_EntryConfChange {
-			// already have conf change not applied
-			// convert to noop entry
-			//if r.PendingConfIndex < None {
-			//	log.Infof("%d receive dup conf change at index %d, is leader %d\n", r.Id, r.PendingConfIndex, r.isLeader())
-			//	e.EntryType = pb.EntryType_EntryNormal
-			//	e.Data = nil
-			//} else {
-			//	log.Infof("%d begin conf change pending at index %d, is leader %d \n", r.Id, e.Index, r.isLeader())
-			//	r.PendingConfIndex = e.Index
-			//}
 			if r.PendingConfIndex < e.Index {
 				r.PendingConfIndex = e.Index
 				//log.Infof("%d begin conf change pending at index %d, is leader %t \n", r.Id, e.Index, r.isLeader())

@@ -95,25 +95,38 @@ func (txn *MvccTxn) GetValue(key []byte) ([]byte, error) {
 	iter := txn.Reader.IterCF(engine_util.CfWrite)
 	defer iter.Close()
 	iter.Seek(EncodeKey(key, txn.StartTS))
+	var err error
+	var value []byte
+	var write *Write
+	for ; iter.Valid(); iter.Next() {
+		item := iter.Item()
+		userKey := DecodeUserKey(item.Key())
+		if !reflect.DeepEqual(userKey, key) {
+			return nil, nil
+		}
+		value, err = item.Value()
+		if err != nil {
+			return nil, err
+		}
+		write, err = ParseWrite(value)
+		if err != nil {
+			return nil, err
+		}
+		if write.Kind == WriteKindDelete {
+			return nil, nil
+		}
+		if write.Kind == WriteKindPut {
+			break
+		}
+		if write.Kind == WriteKindRollback {
+			// rollback, continue find older write value
+			continue
+		}
+	}
 	if !iter.Valid() {
 		return nil, nil
 	}
-	item := iter.Item()
-	userKey := DecodeUserKey(item.Key())
-	if !reflect.DeepEqual(userKey, key) {
-		return nil, nil
-	}
-	value, err := item.Value()
-	if err != nil {
-		return nil, err
-	}
-	write, err := ParseWrite(value)
-	if err != nil {
-		return nil, err
-	}
-	if write.Kind == WriteKindDelete {
-		return nil, nil
-	}
+
 	return txn.Reader.GetCF(engine_util.CfDefault, EncodeKey(key, write.StartTS))
 }
 
@@ -194,6 +207,21 @@ func (txn *MvccTxn) MostRecentWrite(key []byte) (*Write, uint64, error) {
 		return nil, 0, err
 	}
 	return write, decodeTimestamp(item.Key()), nil
+}
+
+func (txn *MvccTxn) Rollback(key []byte, locked bool) {
+	txn.PutWrite(key, txn.StartTS, &Write{
+		StartTS: txn.StartTS,
+		Kind:    WriteKindRollback,
+	})
+	txn.DeleteValue(key)
+	if locked {
+		txn.DeleteLock(key)
+	}
+}
+
+func (txn *MvccTxn) CurrValue(key []byte) ([]byte, error) {
+	return txn.Reader.GetCF(engine_util.CfDefault, EncodeKey(key, txn.StartTS))
 }
 
 // EncodeKey encodes a user key and appends an encoded timestamp to a key. Keys and timestamps are encoded so that
